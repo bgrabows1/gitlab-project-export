@@ -9,8 +9,8 @@ from datetime import date
 import requests
 # Find our libs
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-from gitlab_export import config, gitlab
-
+from gitlab_export import config
+from gitlab_export import gitlab as gitlab_cls
 
 return_code = 0
 
@@ -38,6 +38,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '-d', dest='debug', default=False, action='store_const', const=True,
         help='Debug mode')
+    parser.add_argument(
+        '-a', dest='archive_project_path', default=False,
+        help='Project you want to archive')
 
     args = parser.parse_args()
 
@@ -52,7 +55,7 @@ if __name__ == '__main__':
     # Init gitlab api object
     if args.debug:
         print("%s, token" % (gitlab_url))
-    gitlab = gitlab.Api(gitlab_url, token, ssl_verify)
+    gitlab = gitlab_cls.Api(gitlab_url, token, ssl_verify)
 
     # import project
     if args.project_path and args.filepath and os.path.isfile(args.filepath):
@@ -63,11 +66,35 @@ if __name__ == '__main__':
         # Import successful
         if status:
             print("Import success for %s" % (args.project_path))
+            # If we want to archive already imported project in it's old location.
+            if args.archive_project_path:
+                print('{} project will be archived in old location.'.format(args.project_path))
+                try:
+                    archive_token = c.config["gitlab"]["archive"]["token"]
+                    archive_gitlab_url = c.config["gitlab"]["archive"]["gitlab_url"]
+                except KeyError as key:
+                    print('{} key does not exist in the config file.'.format(key))
+                    sys.exit(1)
+
+                # Let's check if project we want to archive exists in new location after import.
+                if gitlab:
+                    project_dir = os.path.dirname(args.project_path)
+                    project_list = gitlab.project_list(path_glob=project_dir)
+
+                    if args.project_path in project_list:
+                        # Now we can archive project we imported.
+                        archive_gitlab = gitlab_cls.Api(archive_gitlab_url, archive_token, ssl_verify)
+
+                        if archive_gitlab:
+                            status = archive_gitlab.project_archive(project_path=args.archive_project_path)
+                    else:
+                        print('{} has not been imported to Gitlab so cannot be archived in former location.'
+                                .format(args.project_path))
+                        sys.exit(1)
             sys.exit(0)
         else:
             print("Import was not successful")
             sys.exit(1)
-
     else:
         print("Error, you have to specify correct project_path and filepath")
         sys.exit(1)

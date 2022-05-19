@@ -18,6 +18,19 @@ class Api:
         self.project_array = False
         self.ssl_verify = ssl_verify
 
+    def __api_archive(self, project_url):
+        '''Send archive request to API'''
+        self.download_url = None
+        try:
+            return requests.post(
+                self.api_url + "/projects/" +
+                project_url + "/archive",
+                headers=self.headers,
+                verify=self.ssl_verify)
+        except requests.exceptions.RequestException as e:
+            print(e, file=sys.stderr)
+            sys.exit(1)
+
     def __api_export(self, project_url):
         '''Send export request to API'''
         self.download_url = None
@@ -47,6 +60,44 @@ class Api:
         except requests.exceptions.RequestException as e:
             print(e, file=sys.stderr)
             sys.exit(1)
+
+    def __api_archive_status(self, project_url):
+        '''Check project archive status'''
+        r = requests.get(
+            self.api_url+"/projects/" + project_url,
+            verify=self.ssl_verify,
+            headers=self.headers)
+
+        status_archive = False
+
+        if ((float(r.status_code) >= 200) and (float(r.status_code) < 300)):
+            # Api good, check for status
+            s = ""
+
+            # Check API reply status
+            if (r.status_code == requests.codes.ok):
+                json = r.json()
+
+                # Check export status
+                if "archived" in json.keys():
+                    s = json["archived"]
+                    # If is set to true means project is archived
+                    if s == True:
+                        status_archive = True
+            else:
+                print("API not respond well with %s %s" % (
+                    str(r.status_code),
+                    str(r.text)),
+                    file=sys.stderr)
+                return False
+        else:
+            print("API not respond well with %s %s" % (
+                str(r.status_code),
+                str(r.text)),
+                file=sys.stderr)
+            return False
+
+        return status_archive
 
     def __api_status(self, project_url):
         '''Check project status'''
@@ -86,6 +137,39 @@ class Api:
             project_url + "/import",
             verify=self.ssl_verify,
             headers=self.headers)
+
+    def project_archive(self, project_path):
+        ''' Archive project in Gitlab'''
+        url_project_path = urllib.parse.quote(project_path, safe='')
+
+        # Check if project is not already archived.
+        status_archive = self.__api_archive_status(url_project_path)
+
+        # If it is not archived...
+        if not status_archive:
+            print('not archived yet')
+            r = self.__api_archive(url_project_path)
+            if ((float(r.status_code) >= 200) and (float(r.status_code) < 300)):
+                # Check status again after archive
+                time.sleep(5) # Wait a little bit
+                status_archive = self.__api_archive_status(url_project_path)
+                if not status_archive:
+                    print('{} has not been archived - something went wrong.'.
+                            format(os.path.basename(project_path)))
+                    sys.exit(1)
+                else:
+                    print('{} project has been successfully archived in old location.'.
+                            format(os.path.basename(project_path)))
+            else:
+                print("API not respond well with %s %s" % (
+                    str(r.status_code),
+                    str(r.text)),
+                    file=sys.stderr)
+                sys.exit(1)
+        else:
+            print('{} project is already archived.'.format(os.path.basename(project_path)))
+
+        return status_archive
 
     def project_list(self, path_glob="", membership="True"):
         ''' List projects based on glob path '''

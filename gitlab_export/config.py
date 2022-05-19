@@ -32,7 +32,7 @@ class Config:
         # Set default if not exist
         if not self.config['gitlab']['access'].__contains__('ssl_verify'):
             self.config['gitlab']['access']['ssl_verify'] = ssl_verify_default
-        
+
         # Better safe then sorry. If file or directory not exist set default
         if isinstance(self.config['gitlab']['access']['ssl_verify'], str):
             if not os.path.exists(self.config['gitlab']['access']['ssl_verify']):
